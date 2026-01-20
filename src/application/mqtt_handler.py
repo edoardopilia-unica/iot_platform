@@ -1,174 +1,157 @@
 import logging
+import json
+import paho.mqtt.client as mqtt
 from datetime import datetime, timezone
 from flask import current_app
 
 logger = logging.getLogger(__name__)
 
 class MQTTHandler:
-    def __init__(self, app=None, mqtt_client=None):
+    def __init__(self, app):
         self.app = app
-        self.mqtt_client = mqtt_client
-    
-    def handle_message(self, client, userdata, msg):
-        """
-        Handle ESP8266 messages
-        Topic:
-            - devices/<mac>/sensor/temp   (Payload: "25.50")
-            - devices/<mac>/sensor/smoke  (Payload: "300")
-            - devices/<mac>/sensor/flame  (Payload: "0" = FIRE, "1" = OK)
-            - devices/<mac>/discovery     (Payload: "online")
-        """
+        self.client = mqtt.Client()
+        
+        #Callback
+        self.client.on_connect = self._on_connect
+        self.client.on_message = self._on_message
+        self.db_service = current_app.config['DB_SERVICE']
+        
+        self._isrunning = False
 
+    def start(self):
+        broker = self.app.config.get('MQTT_BROKER', 'mqtt')
+        port = self.app.config.get('MQTT_PORT', 1883)
+
+        try:
+            logger.info(f"Connecting to MQTT Broker at {broker}:{port}")
+            self.client.connect(broker, port, 60)
+
+            self.client.loop_start()
+            self._isrunning = True
+            logger.info("MQTT Handler started and listening for messages.")
+        except Exception as e:
+            logger.error(f"Error connecting to MQTT Broker: {e}")
+
+
+    def stop(self):
+        if self._isrunning:
+            self.client.loop_stop()
+            self.client.disconnect()
+            self._isrunning = False
+            logger.info("MQTT Handler stopped.")
+
+    def _on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            logger.info("Connected to MQTT Broker successfully.")
+            # Subscribe to relevant topics
+            self.client.subscribe("devices/+/+")
+            self.client.subscribe("devices/+/sensors/+")
+
+        else:
+            logger.error(f"Failed to connect to MQTT Broker. Return code: {rc}")
+        logger.info("Connected to MQTT Broker")
+    
+
+    def _on_message(self, client, userdata, msg):
         with self.app.app_context():
             try:
                 topic = msg.topic
-                payload = msg.payload.decode()
-
+                try:
+                    payload_str = msg.payload.decode('utf-8')
+                except:
+                    return
+                logger.info(f"Received message on topic: {msg.topic}")
+                
                 parts = topic.split('/')
 
                 if len(parts) < 3:
-                    logger.warning(f"Invalid topic format: {topic}.")
+                    logger.warning(f"Invalid topic format: {topic}")
                     return
                 
                 mac_address = parts[1]
-                msg_type = parts[-1]
+                category = parts[2]
 
-                if msg_type == 'discovery':
-                    logger.info(f"Device {mac_address} is online.")
-                    payload_str = msg.payload.decode('utf-8')
+                # Discovery
+                if category == "discovery":
                     if payload_str == "online":
                         self._handle_discovery(mac_address)
                     return
                 
-                if msg_type == 'sensor':
-                    sensor_msg_type = parts[3]
-                    payload_str = msg.payload.decode('utf-8')
-                    self._process_sensor_data(mac_address, sensor_msg_type, payload_str)
-
+                # Sensor Data
+                if category == "sensors" and len(parts) > 3:
+                    sensor_type = parts[3]
+                    self._process_sensor_data(mac_address, sensor_type, payload_str)
+                    return
+                
             except Exception as e:
-                logger.error(f"Error handling MQTT message: {e}")
+                logger.error(f"Error processing MQTT message: {e}")
+    
+
+    def _process_sensor_data(self, mac_address, sensor_type, payload_str):
+        val_flame = False
+        val_smoke = 0.0
+        val_temp = 0.0
+
+        try:
+            if sensor_type == "flame":
+                val_flame = (str(payload_str).strip() == "0")
+            elif sensor_type == "smoke":
+                val_smoke = float(payload_str)
+            elif sensor_type == "temp":
+                val_temp = float(payload_str)
+        except ValueError:
+            return
         
-    def _handle_discovery(self, mac_address):
-        db_service = current_app.config['DB_SERVICE']
-        dr_factory = current_app.config['DR_FACTORY']
-
-        nodes = db_service.query_drs('node', {'profile.mac_address': mac_address})
-
-        if nodes:
-            node = nodes[0]
-            logger.info(f"Node {mac_address} came online.")
-            node['entity']['data']['last_seen'] = datetime.now(timezone.utc)
-            if node['profile'].get('zone_id'):
-                node['entity']['data']['status'] = 'Active'
-            db_service.update_dr('node', node['_id'], node)
-        else:
-            logger.info(f"New node discovered with MAC address {mac_address}.")
-            
-            node_data = {
-                'mac_address': mac_address,
-                'zone_id': None,
-                'created_at': datetime.now(timezone.utc),
-                'updated_at': datetime.now(timezone.utc),
-            }
-
-            try:
-                new_node = dr_factory.create_dr('node', node_data)
-                new_node['entity']['data']['status'] = 'Provisioning'
-                new_node['entity']['data']['last_seen'] = datetime.now(timezone.utc)
-
-                node_id = db_service.insert_dr('node', new_node)
-
-                logger.info(f"Node created with ID {node_id} for MAC address {mac_address}.")
-            except Exception as e:
-                logger.error(f"Failed to create node for MAC address {mac_address}: {e}")
-
-    def _process_sensor_data(self, mac_address, sensor_type, value_str):
-        db_service = current_app.config['DB_SERVICE']
-
-        nodes = db_service.query_drs('node', {'profile.mac_address': mac_address})
-
+        nodes = self.db_service.query_drs('node', {'profile.mac_address': mac_address})
         if not nodes:
-            logger.warning(f"No node found for MAC address {mac_address}.")
+            self._handle_discovery(mac_address)
             return
         
         node = nodes[0]
         node_id = node['_id']
-        entity_data = node['entity']['data']
-
-        try:
-            if sensor_type == 'temp':
-                entity_data['temp_level'] = float(value_str)
-            elif sensor_type == 'smoke':
-                entity_data['smoke_level'] = float(value_str)
-            elif sensor_type == 'flame':
-                entity_data['flame_level'] = (value_str == "0")  # True if FIRE, False if OK
-            
-            entity_data['last_seen'] = datetime.now(timezone.utc)
-            db_service.update_dr('node', node_id, node)
-
-            if entity_data.get('status') == 'Active' and node['profile'].get('zone_id'):
-                self._check_safety_thresholds(node)
-        except ValueError:
-            logger.error(f"Invalid sensor value '{value_str}' for sensor type '{sensor_type}' on node {mac_address}.")
-
-    def _check_safety_thresholds(self, node):
         zone_id = node['profile'].get('zone_id')
-        db_service = current_app.config['DB_SERVICE']
-        dr_factory = current_app.config['DR_FACTORY']
 
-        zone = db_service.get_dr('zone', zone_id)
+        entity_data = node['entity']['data']
+        entity_data['last_seen'] = datetime.now(timezone.utc)
+        if sensor_type == "flame": entity_data['flame_detected'] = val_flame
+        if sensor_type == "smoke": entity_data['smoke_level'] = val_smoke
+        if sensor_type == "temp": entity_data['temp_level'] = val_temp
 
+        node['metadata']['updated_at'] = datetime.now(timezone.utc)
+        self.db_service.update_dr('node', node_id, node)
+
+        if zone_id and entity_data['status'] == "Active":
+            self._check_zone_thresholds(zone_id, val_temp, val_smoke, val_flame, sensor_type)
+        
+    def _check_zone_thresholds(self, zone_id, val_temp, val_smoke, val_flame, sensor_type):
+        zone = self.db_service.get_dr('zone', zone_id)
         if not zone:
-            logger.warning(f"No zone found for zone ID {zone_id}.")
             return
         
-        data = node['entity']['data']
-        temp_level = data.get('temp_level', 0)
-        smoke_level = data.get('smoke_level', 0)
-        is_flame = data.get('flame_level', False)
+        zone_data = zone['entity']['data']
+        temp_threshold = zone_data.get('temp_threshold', 50.0)
+        smoke_threshold = zone_data.get('smoke_threshold', 500.0)
 
-        temp_threshold = zone['entity']['data'].get('temp_threshold', 40.0)
-        smoke_threshold = zone['entity']['data'].get('smoke_threshold', 800.0)
+        alarm_triggered = False
+        alarm_type = ""
 
-        detected_cause = None
+        if sensor_type == "temp" and val_temp > temp_threshold:
+            alarm_triggered = True
+            alarm_type = "Temperature"
+        elif sensor_type == "smoke" and val_smoke > smoke_threshold:
+            alarm_triggered = True
+            alarm_type = "Smoke"
+        elif sensor_type == "flame" and val_flame:
+            alarm_triggered = True
+            alarm_type = "Flame"
 
-        if (is_flame): detected_cause = 'flame'
-        elif (temp_level >= temp_threshold): detected_cause = 'temp'
-        elif (smoke_level >= smoke_threshold): detected_cause = 'smoke'
-        
-
-        current_zone_status = zone['entity']['data']['status']
-        now = datetime.now(timezone.utc)
-
-        if detected_cause:
-            if current_zone_status != "Active" or current_zone_status == detected_cause: return
-            
+        if alarm_triggered:
             alarm_data = {
-                "zone_id": zone_id,
-                "trigger_cause": detected_cause,
-                "start_time": now,
-                "end_time": None,
-                "created_at": now,
-                "updated_at": now
+                'zone_id': zone_id,
+                'alarm_type': alarm_type,
+                'triggered_at': datetime.now(timezone.utc),
+                'status': 'Active'
             }
-
-            alarm_dr = dr_factory.create_dr('alarm', alarm_data)
-            alarm_id = db_service.insert_dr('alarm', alarm_dr)
-
-            zone['entity']['data']['status'] = detected_cause
-            zone['metadata']['updated_at'] = now
-
-            db_service.update_dr('zone', zone_id, zone)
-
-            self.send_command(node['profile']['mac_address'], 'actuate_alarms')
-            logger.info(f"Alarm {alarm_id} triggered for zone {zone_id} due to {detected_cause}.")
-
-    def send_command(self, mac_address, command):
-        """
-        Send command to ESP8266 device
-        """
-
-        if self.mqtt_client:
-            topic = f"devices/{mac_address}/command"
-            self.mqtt_client.publish(topic, command)
-            logger.info(f"Sent command '{command}' to device {mac_address} on topic '{topic}'.")
+            alarm_dr = current_app.config['DT_FACTORY'].create_dr('alarm', alarm_data)
+            self.db_service.insert_dr('alarm', alarm_dr)
+            logger.warning(f"Alarm triggered in Zone {zone_id} due to {alarm_type} sensor.")
