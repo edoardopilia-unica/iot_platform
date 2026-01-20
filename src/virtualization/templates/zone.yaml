@@ -1,0 +1,47 @@
+schemas:
+  common_fields:
+    _id: str
+    type: str
+    profile:
+      name: str 
+      description: str
+      temp_threshold: float
+      smoke_threshold: float
+    metadata:
+      created_at: datetime
+      updated_at: datetime
+
+  entity:
+    data:
+      status: str # "Active", "Inactive", "Flame_alarm", "Smoke_alarm", "Temp_alarm", "Manual_alarm"
+
+  validations:
+    mandatory_fields:
+      root: 
+        - _id
+        - type
+      profile: 
+        - name
+        - temp_threshold
+        - smoke_threshold
+      metadata:
+        - created_at
+        - updated_at
+
+
+  type_constraints:
+    temp_threshold:
+      type: float
+      minimum: 0.0
+      maximum: 100.0
+    smoke_threshold:
+      type: float
+      minimum: 0.0
+      maximum: 1000.0
+    status:
+      type: str
+      enum: ["Active", "Inactive", "Flame_alarm", "Smoke_alarm", "Temp_alarm", "Manual_alarm"]
+
+
+    initialization:
+      active: true
