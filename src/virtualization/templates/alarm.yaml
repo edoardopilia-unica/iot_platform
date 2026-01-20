@@ -5,13 +5,14 @@ schemas:
     profile:
       zone_id: str
       trigger_cause: str #"temp", "smoke", "flame", "manual"
+      start_time: datetime
     metadata:
       created_at: datetime
       updated_at: datetime
 
   entity:
     data:
-      start_time: datetime
+
       end_time: datetime  # If null => ongoing alarm
 
   validations:
@@ -22,11 +23,10 @@ schemas:
       profile: 
         - zone_id
         - trigger_cause
+        - start_time
       metadata: 
         - created_at
         - updated_at
-      data:
-        - start_time
 
   type_constraints:
     trigger_cause:
