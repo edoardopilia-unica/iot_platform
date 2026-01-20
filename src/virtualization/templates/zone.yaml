@@ -40,7 +40,7 @@ schemas:
       maximum: 1000.0
     status:
       type: str
-      enum: ["Active", "Inactive", "Flame_alarm", "Smoke_alarm", "Temp_alarm", "Manual_alarm"]
+      enum: ["Active", "Inactive", "flame", "smoke", "temp", "manual"]
 
 
     initialization:
