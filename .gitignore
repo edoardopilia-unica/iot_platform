@@ -1,1 +1,4 @@
 .venv
+src/.DS_Store
+src/virtualization/.DS_Store
+.DS_Store
