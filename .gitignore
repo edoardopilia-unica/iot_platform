@@ -17,3 +17,4 @@ src/services/__pycache__/database_service.cpython-39.pyc
 src/virtualization/__pycache__/__init__.cpython-39.pyc
 src/virtualization/digital_replica/__pycache__/__init__.cpython-39.pyc
 src/virtualization/digital_replica/__pycache__/schema_registry.cpython-39.pyc
+src/application/__pycache__/fcs_api.cpython-39.pyc
