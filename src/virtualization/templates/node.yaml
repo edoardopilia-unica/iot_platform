@@ -1,0 +1,50 @@
+schemas:
+  common_fields:
+    _id: str
+    type: str
+    profile:
+      mac_address: str
+      zone_id: str
+    metadata: 
+      created_at: datetime
+      updated_at: datetime
+
+  entity:
+    data:
+      status: str # "Active", "Inactive"
+      last_seen: datetime
+      temp_level: float
+      smoke_level: float
+      is_flame: bool
+
+
+
+  validations:
+    mandatory_fields:
+      root: 
+        - _id
+        - type
+      profile: 
+        - mac_address
+        - zone_id
+      metadata:
+        - created_at
+        - updated_at
+
+
+  type_constraints:
+    temp_level:
+      type: float
+      minimum: 0.0
+      maximum: 100.0
+    smoke_level:
+      type: float
+      minimum: 0.0
+      maximum: 1000.0
+    status:
+      type: str
+      enum: ["Active", "Inactive"]
+
+
+    initialization:
+      active: true
