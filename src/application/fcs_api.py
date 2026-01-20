@@ -100,6 +100,28 @@ def resolve_alarms(zone_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@fcs_api.route('/zones', methods=['GET'])
+def get_zones():
+    """Get status of all zones"""
+    try:
+        db_service = current_app.config['DB_SERVICE']
+        zones = db_service.query_drs('zone', {})
+
+        result = []
+        for zone in zones:
+            result.append({
+                'id': zone['_id'],
+                'name': zone['name'],
+                'description': zone['description'],
+                'temp_threshold': zone['temp_threshold'],
+                'smoke_threshold': zone['smoke_threshold'],
+                'status': zone['entity']['data']['status']
+            })
+        return jsonify(zones), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
 # --- Node Management APIs ---
 @fcs_api.route('/nodes', methods=['POST'])
 def create_node():
