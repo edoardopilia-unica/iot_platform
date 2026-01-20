@@ -1,9 +1,9 @@
 database:
   connection:
-    host: "localhost"
+    host: "mongo"
     port: 27017
-    username: ""  # Leave empty if no authentication is required
-    password: ""  # Leave empty if no authentication is required
+    username: "admin"  # Leave empty if no authentication is required
+    password: "password"  # Leave empty if no authentication is required
   settings:
     name: "digital_twin_db"  # Your database name
     auth_source: "admin"
