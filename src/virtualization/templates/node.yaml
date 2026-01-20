@@ -26,7 +26,6 @@ schemas:
         - type
       profile: 
         - mac_address
-        - zone_id
       metadata:
         - created_at
         - updated_at
