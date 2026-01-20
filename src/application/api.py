@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime
 from bson import ObjectId
+from src.application.fcs_api import fcs_api
+
 
 # Create blueprints for different API groups
 dt_api = Blueprint('dt_api', __name__, url_prefix='/api/dt')
@@ -129,4 +131,5 @@ def register_api_blueprints(app):
     app.register_blueprint(dt_api)
     app.register_blueprint(dr_api)
     app.register_blueprint(dt_management_api)
+    app.register_blueprint(fcs_api)
 
