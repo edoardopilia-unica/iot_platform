@@ -7,7 +7,7 @@ schemas:
       description: str
       temp_threshold: float
       smoke_threshold: float
-    metadata:
+    metadata: 
       created_at: datetime
       updated_at: datetime
 
