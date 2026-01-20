@@ -11,7 +11,7 @@ schemas:
 
   entity:
     data:
-      status: str # "Active", "Inactive"
+      status: str # "Active", "Provisioning", "Inactive"
       last_seen: datetime
       temp_level: float
       smoke_level: float
@@ -42,7 +42,7 @@ schemas:
       maximum: 1000.0
     status:
       type: str
-      enum: ["Active", "Inactive"]
+      enum: ["Active", "Provisioning", "Inactive"]
 
 
     initialization:
