@@ -292,7 +292,7 @@ def acs_sync():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-
+@fcs_api.route('/personnel/<zone_id>', methods=['GET'])
 def get_trapped(zone_id):
     try:
         db_service = current_app.config['DB_SERVICE']
