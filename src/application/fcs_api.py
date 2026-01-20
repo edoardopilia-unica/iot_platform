@@ -147,7 +147,20 @@ def create_node():
         return jsonify({'node_id': node_id, 'message': 'Node created successfully'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
+@fcs_api.route('/nodes', methods=['GET'])
+def get_nodes():
+    """Get all nodes"""
+    try:
+        db_service = current_app.config['DB_SERVICE']
+        nodes = db_service.query_drs('node', {})
+        for n in nodes:
+            n['_id'] = str(n['_id'])
+        return jsonify(nodes), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @fcs_api.route('/nodes/<node_id>/assign/<zone_id>', methods=['PUT'])
 def assign_node(node_id, zone_id):
     """Assign a node to a zone"""
