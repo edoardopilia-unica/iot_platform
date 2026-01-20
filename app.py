@@ -16,7 +16,14 @@ class FlaskServer:
 
     def _init_components(self):
         """Initialize all required components and store them in app config"""
+        
+        # Initialize SchemaRegistry and load schemas
         schema_registry = SchemaRegistry()
+
+        schema_registry.load_schema('zone', 'src/virtualization/templates/zone.yaml')
+        schema_registry.load_schema('node', 'src/virtualization/templates/node.yaml')
+        schema_registry.load_schema('alarm', 'src/virtualization/templates/alarm.yaml')    
+
         # Load database configuration
         db_config = ConfigLoader.load_database_config()
         connection_string = ConfigLoader.build_connection_string(db_config)
