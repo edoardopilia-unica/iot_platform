@@ -7,22 +7,28 @@ from src.application.api import register_api_blueprints
 from config.config_loader import ConfigLoader
 
 
+from src.application.mqtt_handler import MQTTHandler
+
+
 class FlaskServer:
     def __init__(self):
         self.app = Flask(__name__)
         CORS(self.app)
         self._init_components()
         self._register_blueprints()
+        self.mqtt_handler = MQTTHandler(app=self.app)
 
     def _init_components(self):
         """Initialize all required components and store them in app config"""
         
         # Initialize SchemaRegistry and load schemas
         schema_registry = SchemaRegistry()
-
-        schema_registry.load_schema('zone', 'src/virtualization/templates/zone.yaml')
-        schema_registry.load_schema('node', 'src/virtualization/templates/node.yaml')
-        schema_registry.load_schema('alarm', 'src/virtualization/templates/alarm.yaml')    
+        try:
+            schema_registry.load_schema('zone', 'src/virtualization/templates/zone.yaml')
+            schema_registry.load_schema('node', 'src/virtualization/templates/node.yaml')
+            schema_registry.load_schema('alarm', 'src/virtualization/templates/alarm.yaml')
+        except Exception as e:
+            print(f"Error loading schemas: {e}")
 
         # Load database configuration
         db_config = ConfigLoader.load_database_config()
@@ -56,6 +62,7 @@ class FlaskServer:
             # Cleanup on server shutdown
             if "DB_SERVICE" in self.app.config:
                 self.app.config["DB_SERVICE"].disconnect()
+            self.mqtt_handler.stop()
 
 
 if __name__ == "__main__":
