@@ -257,3 +257,55 @@ def trigger_alarm():
         return jsonify({'error': str(e)}), 500
 
 
+# --- Misc ---
+@fcs_api.route('/personnel/sync', methods=['POST'])
+def acs_sync():
+    try:
+        data = request.get_json()
+        db_service = current_app.config['DB_SERVICE']
+        
+        zones = db_service.query_drs('zone', {})
+        zone_map = {z['profile']['name']: str(z['_id']) for z in zones}
+        
+        count = 0
+        personnel_coll = db_service.db['personnel']
+
+        for p in data:
+            z_name = p.get('zone_name')
+        
+            current_zone_id = None
+            if p.get('is_inside') and z_name in zone_map:
+                current_zone_id = zone_map[z_name]
+            
+            personnel_coll.update_one(
+                {'badge_id': str(p['badge_id'])},
+                {'$set': {
+                    'full_name': p['full_name'],
+                    'current_zone_id': current_zone_id,
+                    'last_update': datetime.now(datetime.timezone.utc)
+                }},
+                upsert=True
+            )
+            count += 1
+            
+        return jsonify({'message': f'Synced {count} personnel records'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
+def get_trapped(zone_id):
+    try:
+        db_service = current_app.config['DB_SERVICE']
+        people = list(db_service.db['personnel'].find({
+            'current_zone_id': zone_id}))
+        result = []
+        for p in people:
+            result.append({
+                'badge_id': p['badge_id'],
+                'full_name': p.get('full_name', 'Unknown')
+            })
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
