@@ -106,26 +106,25 @@ class MQTTHandler:
         
         nodes = db_service.query_drs('node', {'profile.mac_address': mac_address})
         if not nodes:
-            self._handle_discovery(mac_address)
             return
         
         node = nodes[0]
         node_id = node['_id']
         zone_id = node['profile'].get('zone_id')
 
-        entity_data = node['data']
+        entity_data = node.get('data')
         entity_data['last_seen'] = datetime.now(timezone.utc)
-        if sensor_type == "flame": entity_data['flame_detected'] = val_flame
-        if sensor_type == "smoke": entity_data['smoke_level'] = val_smoke
-        if sensor_type == "temp": entity_data['temp_level'] = val_temp
+        entity_data['flame_detected'] = val_flame
+        entity_data['smoke_level'] = val_smoke
+        entity_data['temp_level'] = val_temp
 
         node['metadata']['updated_at'] = datetime.now(timezone.utc)
         db_service.update_dr('node', node_id, node)
 
         if zone_id and entity_data['status'] == "Active":
-            self._check_zone_thresholds(zone_id, val_temp, val_smoke, val_flame, sensor_type)
+            self._check_zone_thresholds(zone_id, val_temp, val_smoke, val_flame)
         
-    def _check_zone_thresholds(self, zone_id, val_temp, val_smoke, val_flame, sensor_type):
+    def _check_zone_thresholds(self, zone_id, val_temp, val_smoke, val_flame):
         db_service = current_app.config['DB_SERVICE']
         zone = db_service.get_dr('zone', zone_id)
         if not zone:
@@ -136,12 +135,12 @@ class MQTTHandler:
         smoke_threshold = zone_data.get('smoke_threshold', 500.0)
 
         alarm_type = ""
-
-        if sensor_type == "temp" and val_temp > temp_threshold:
+        
+        if val_temp > temp_threshold:
             alarm_type = "Temperature"
-        elif sensor_type == "smoke" and val_smoke > smoke_threshold:
+        elif val_smoke > smoke_threshold:
             alarm_type = "Smoke"
-        elif sensor_type == "flame" and val_flame:
+        elif val_flame:
             alarm_type = "Flame"
 
         self._trigger_alarm(zone_id, alarm_type)
