@@ -78,7 +78,7 @@ def resolve_alarms(zone_id):
             return jsonify({'error': 'Zone not found'}), 404
 
         zone_status = zone['data']['status']
-        if zone_status == 'Inactive' or zone_status == 'Active':
+        if zone_status == 'Active':
             return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200
 
         active_alarms = db_service.query_drs('alarm', {
@@ -89,7 +89,7 @@ def resolve_alarms(zone_id):
         now = datetime.now(timezone.utc)
 
         if not active_alarms:
-            zone['entity']['data']['status'] = 'Active'
+            zone['data']['status'] = 'Active'
             zone['metadata']['updated_at'] = now
             db_service.update_dr('zone', zone_id, zone)
             return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200

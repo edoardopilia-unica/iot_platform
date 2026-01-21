@@ -143,7 +143,19 @@ class MQTTHandler:
         elif val_flame:
             alarm_type = "Flame"
 
-        self._trigger_alarm(zone_id, alarm_type)
+        if alarm_type:
+            self._trigger_alarm(zone_id, alarm_type)
+        else:
+            status = zone['data']['status']
+            if status == "Active":
+                existing = db_service.query_drs("alarm", {
+                    "profile.zone_id": zone_id,
+                    "profile.trigger_cause": "manual",
+                    "data.end_time": None
+                })
+                if not(existing): self.send_command(zone['profile']['mac_address'], "stop_alarm")
+            
+
 
     def _trigger_alarm(self, zone_id, alarm_type):
         db_service = current_app.config['DB_SERVICE']
