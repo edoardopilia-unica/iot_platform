@@ -23,7 +23,6 @@ schemas:
     mandatory_fields:
       root: 
         - _id
-        - type
       profile: 
         - mac_address
       metadata:
