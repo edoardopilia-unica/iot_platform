@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-import datetime
+from datetime import datetime, timezone
 
 # Blueprint FCS APIs
 fcs_api = Blueprint('fcs_api', __name__, url_prefix='/api/fcs')
@@ -22,10 +22,12 @@ def create_zone():
             'temp_threshold': data.get('temp_threshold', 50.0),
             'smoke_threshold': data.get('smoke_threshold', 500.0)
             },
-            "entity": {"data": {"status": "Active"}},
+            "data": {
+                "status": "Active"
+            },
             "metadata": {
-                "created_at": datetime.datetime.now(datetime.timezone.utc),
-                "updated_at": datetime.datetime.now(datetime.timezone.utc),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             }
         }        
         zone_dr = dr_factory.create_dr('zone', zone_data)
@@ -58,7 +60,7 @@ def delete_zone(zone_id):
         for node in nodes_in_zone:
             node['profile']['zone_id'] = None
             node['entity']['data']['status'] = 'Inactive'
-            node['metadata']['updated_at'] = datetime.now(datetime.timezone.utc)
+            node['metadata']['updated_at'] = datetime.now(timezone.utc)
             db_service.update_dr("node", node['_id'], node)
         
         db_service.delete_dr("zone", zone_id)
@@ -66,7 +68,7 @@ def delete_zone(zone_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-@fcs_api.route('/zones/<zone_id>/resolve', methods=['PUT'])
+@fcs_api.route('/zones/<zone_id>/resolve', methods=['POST'])
 def resolve_alarms(zone_id):
     try:
         db_service = current_app.config['DB_SERVICE']
@@ -74,16 +76,16 @@ def resolve_alarms(zone_id):
         if not zone:
             return jsonify({'error': 'Zone not found'}), 404
 
-        zone_status = zone['entity']['data']['status']
+        zone_status = zone['data']['status']
         if zone_status == 'Inactive' or zone_status == 'Active':
             return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200
 
         active_alarms = db_service.query_drs('alarm', {
             'profile.zone_id': zone_id,
-            'entity.data.end_time': None
+            'data.end_time': None
         })
 
-        now = datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
 
         if not active_alarms:
             zone['entity']['data']['status'] = 'Active'
@@ -92,11 +94,11 @@ def resolve_alarms(zone_id):
             return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200
         
         for alarm in active_alarms:
-            alarm['entity']['data']['end_time'] = now
+            alarm['data']['end_time'] = now
             alarm['metadata']['updated_at'] = now
             db_service.update_dr('alarm', alarm['_id'], alarm)
         
-        zone['entity']['data']['status'] = 'Active'
+        zone['data']['status'] = 'Active'
         zone['metadata']['updated_at'] = now
         db_service.update_dr('zone', zone_id, zone)
 
@@ -114,7 +116,7 @@ def get_zones():
         result = []
         for zone in zones:
             profile = zone.get('profile', {})
-            data = zone.get('entity', {}).get('data', {})
+            data = zone.get('data', {})
             result.append({
                 'id': zone['_id'],
                 'name': profile.get('name'),
@@ -141,15 +143,18 @@ def create_node():
         dr_factory = current_app.config['DR_FACTORY']
 
         node_data = {
-            'mac_address': data['mac_address'],
-            'zone_id': data.get('zone_id', None),
-            'created_at': datetime.now(datetime.timezone.utc),
-            'updated_at': datetime.now(datetime.timezone.utc),
+            'profile' : {
+                'mac_address': data['mac_address'],
+                'zone_id': data.get('zone_id', None),
+            },
+            'data': {'status': 'Provisioning'},
+            'metadata' : {
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc),}
         }
 
         node_dr = dr_factory.create_dr('node', node_data)
-        node_dr['entity']['data']['status'] = 'Provisioning'
-        node_id = current_app.config['DB_SERVICE'].insert_dr('node', node_dr)
+        node_id = current_app.config['DB_SERVICE'].save_dr('node', node_dr)
         return jsonify({'node_id': node_id, 'message': 'Node created successfully'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -160,14 +165,27 @@ def get_nodes():
     try:
         db_service = current_app.config['DB_SERVICE']
         nodes = db_service.query_drs('node', {})
+        result = []
+
         for n in nodes:
-            n['_id'] = str(n['_id'])
-        return jsonify(nodes), 200
+            profile = n.get('profile', {})
+            data = n.get('data', {})
+            result.append({
+            'id': n['_id'],
+            'mac_address': profile.get('mac_address'),
+            'zone_id': profile.get('zone_id'),
+            'status': data.get('status'),
+            'temp_level': data.get('temp_level', None),
+            'smoke_level': data.get('smoke_level', None),
+            'flame_detected': data.get('flame_detected', None),
+            'last_seen': data.get('last_seen', None)
+            })
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@fcs_api.route('/nodes/<node_id>/assign/<zone_id>', methods=['PUT'])
+@fcs_api.route('/nodes/<node_id>/assign/<zone_id>', methods=['POST'])
 def assign_node(node_id, zone_id):
     """Assign a node to a zone"""
     try:
@@ -182,15 +200,15 @@ def assign_node(node_id, zone_id):
             return jsonify({'error': 'Node not found'}), 404
         
         node['profile']['zone_id'] = zone_id
-        node['entity']['data']['status'] = 'Active'
-        node['metadata']['updated_at'] = datetime.now(datetime.timezone.utc)
+        node['data']['status'] = 'Active'
+        node['metadata']['updated_at'] = datetime.now(timezone.utc)
 
         current_app.config['DB_SERVICE'].update_dr('node', node_id, node)
         return jsonify({'message': f'Node {node_id} assigned to zone {zone_id} successfully'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
-@fcs_api.route('/nodes/<node_id>/detach', methods=['PUT'])
+@fcs_api.route('/nodes/<node_id>/detach', methods=['POST'])
 def detach_node(node_id):
     """Detach a node from a zone"""
     try:
@@ -200,7 +218,7 @@ def detach_node(node_id):
         
         zone = node['profile'].get('zone_id', None)
         node['profile']['zone_id'] = None
-        node['entity']['data']['status'] = 'Inactive'
+        node['data']['status'] = 'Inactive'
         node['metadata']['updated_at'] = datetime.now(datetime.timezone.utc)
 
         current_app.config['DB_SERVICE'].update_dr('node', node_id, node)
@@ -220,9 +238,9 @@ def get_alarms():
 
         query = {}
         if active_filter == 'true':
-            query = {'entity.data.end_time': None}  # Filter for active alarms
+            query = {'data.end_time': None}  # Filter for active alarms
         elif active_filter == 'false':
-            query = {'entity.data.end_time': not None}  # Filter for inactive alarms
+            query = {'data.end_time': not None}  # Filter for inactive alarms
         
         alarms = db_service.query_drs('alarm', query)
         return jsonify(alarms), 200
@@ -251,24 +269,26 @@ def trigger_alarm():
         if not zone:
             return jsonify({'error': 'Zone not found'}), 404
         
-        dr_factory = current_app.config['DR_FACTORY']
+        dr_factory = current_app.config['DR_FACTORY']['alarm']
 
         alarm_data = {
-            "zone_id": zone_id,
-            "trigger_cause": trigger_cause,
-            "start_time": datetime.now(datetime.timezone.utc),
-            "end_time": None,
-            "created_at": datetime.now(datetime.timezone.utc),
-            "updated_at": datetime.now(datetime.timezone.utc)
+            "profile": {
+                "zone_id": zone_id,
+                "trigger_cause": trigger_cause,
+                "start_time": datetime.now(timezone.utc)},
+            "data": {"end_time": None},
+            "metadata": {
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc)},
         }
         
         alarm_dr = dr_factory.create_dr('alarm', alarm_data)
-        alarm_id = db_service.insert_dr('alarm', alarm_dr)
+        alarm_id = db_service.save_dr('alarm', alarm_dr)
 
-        zone_status = zone['entity']['data']['status']
+        zone_status = zone['data']['status']
         if zone_status == 'Active':
-            zone['entity']['data']['status'] = trigger_cause
-            zone['metadata']['updated_at'] = datetime.now(datetime.timezone.utc)
+            zone['data']['status'] = trigger_cause
+            zone['metadata']['updated_at'] = datetime.now(timezone.utc)
             db_service.update_dr('zone', zone_id, zone)
         
         return jsonify({'alarm_id': alarm_id, 'message': 'Alarm triggered successfully'}), 201
@@ -301,7 +321,7 @@ def acs_sync():
                 {'$set': {
                     'full_name': p['full_name'],
                     'current_zone_id': current_zone_id,
-                    'last_update': datetime.now(datetime.timezone.utc)
+                    'last_update': datetime.now(timezone.utc)
                 }},
                 upsert=True
             )

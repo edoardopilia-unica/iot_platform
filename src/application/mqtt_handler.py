@@ -113,7 +113,7 @@ class MQTTHandler:
         node_id = node['_id']
         zone_id = node['profile'].get('zone_id')
 
-        entity_data = node['entity']['data']
+        entity_data = node['data']
         entity_data['last_seen'] = datetime.now(timezone.utc)
         if sensor_type == "flame": entity_data['flame_detected'] = val_flame
         if sensor_type == "smoke": entity_data['smoke_level'] = val_smoke
@@ -131,7 +131,7 @@ class MQTTHandler:
         if not zone:
             return
         
-        zone_data = zone['entity']['data']
+        zone_data = zone['profile']
         temp_threshold = zone_data.get('temp_threshold', 50.0)
         smoke_threshold = zone_data.get('smoke_threshold', 500.0)
 
@@ -148,18 +148,18 @@ class MQTTHandler:
 
     def _trigger_alarm(self, zone_id, alarm_type):
         db_service = current_app.config['DB_SERVICE']
-        dr_factory = current_app.config['DR_FACTORY']
+        dr_factory = current_app.config['DR_FACTORY']['alarm']
 
         logger.warning(f"Triggering alarm for zone {zone_id} due to {alarm_type}")
 
         zone = db_service.get_dr('zone', zone_id)
-        zone['entity']['data']['status'] = alarm_type
+        zone['data']['status'] = alarm_type
         zone['metadata']['updated_at'] = datetime.now(timezone.utc)
         db_service.update_dr('zone', zone_id, zone)
 
         existing = db_service.query_drs("alarm", {
             "profile.zone_id": zone_id,
-            "entity.data.end_time": None
+            "data.end_time": None
         })
 
         if not existing:
@@ -173,7 +173,7 @@ class MQTTHandler:
             }
             try:
                 alarm_dr = dr_factory.create_dr('alarm', alarm_data)
-                alarm_id = db_service.insert_dr('alarm', alarm_dr)
+                alarm_id = db_service.save_dr('alarm', alarm_dr)
             except Exception as e:
                 logger.error(f"Error triggering alarm: {e}")
         
@@ -183,7 +183,7 @@ class MQTTHandler:
     
     def _handle_discovery(self, mac_address):
         db_service = current_app.config['DB_SERVICE']
-        dr_factory = current_app.config['DR_FACTORY']
+        dr_factory = current_app.config['DR_FACTORY']['node']
 
         if db_service.query_drs('node', {'profile.mac_address': mac_address}):
             return
@@ -198,9 +198,9 @@ class MQTTHandler:
                 'updated_at': datetime.now(timezone.utc),
             }
             node_dr = dr_factory.create_dr('node', node_data)
-            node_dr['entity']['data']['status'] = "Provisioning"
-            node_dr['entity']['data']['last_seen'] = datetime.now(timezone.utc)
-            db_service.insert_dr('node', node_dr)
+            node_dr['data']['status'] = "Provisioning"
+            node_dr['data']['last_seen'] = datetime.now(timezone.utc)
+            db_service.save_dr('node', node_dr)
         except Exception as e:
             logger.error(f"Error handling provisioning: {e}")
     
