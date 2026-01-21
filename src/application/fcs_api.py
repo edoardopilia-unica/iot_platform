@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timezone
 
+
 # Blueprint FCS APIs
 fcs_api = Blueprint('fcs_api', __name__, url_prefix='/api/fcs')
 
@@ -102,6 +103,13 @@ def resolve_alarms(zone_id):
         zone['metadata']['updated_at'] = now
         db_service.update_dr('zone', zone_id, zone)
 
+        mqtt_handler = current_app.config.get('MQTT')
+
+        if mqtt_handler:
+            nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
+            for node in nodes:
+                mqtt_handler.send_command(node['profile']['mac_address'], "stop_alarm")
+
         return jsonify({'message': f'Alarms resolved for zone {zone_id} successfully'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -140,7 +148,7 @@ def create_node():
         if not all(field in data for field in required_fields):
             return jsonify({'error': 'Missing MAC Address for node'}), 400
         
-        dr_factory = current_app.config['DR_FACTORY']
+        dr_factory = current_app.config['DR_FACTORY']['node']
 
         node_data = {
             'profile' : {
@@ -290,7 +298,14 @@ def trigger_alarm():
             zone['data']['status'] = trigger_cause
             zone['metadata']['updated_at'] = datetime.now(timezone.utc)
             db_service.update_dr('zone', zone_id, zone)
-        
+
+        mqtt_handler = current_app.config.get('MQTT')
+
+        if mqtt_handler:
+            nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
+            for node in nodes:
+                mqtt_handler.send_command(node['profile']['mac_address'], "actuate_alarm")
+
         return jsonify({'alarm_id': alarm_id, 'message': 'Alarm triggered successfully'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500

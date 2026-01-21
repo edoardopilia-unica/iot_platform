@@ -45,7 +45,7 @@ class MQTTHandler:
             logger.info("Connected to MQTT Broker successfully.")
             # Subscribe to relevant topics
             self.client.subscribe("devices/+/+")
-            self.client.subscribe("devices/+/sensors/+")
+            self.client.subscribe("devices/+/sensor/+")
 
         else:
             logger.error(f"Failed to connect to MQTT Broker. Return code: {rc}")
@@ -78,7 +78,7 @@ class MQTTHandler:
                     return
                 
                 # Sensor Data
-                if category == "sensors" and len(parts) > 3:
+                if category == "sensor" and len(parts) > 3:
                     sensor_type = parts[3]
                     self._process_sensor_data(mac_address, sensor_type, payload_str)
                     return
@@ -104,7 +104,7 @@ class MQTTHandler:
         except ValueError:
             return
         
-        nodes = self.db_service.query_drs('node', {'profile.mac_address': mac_address})
+        nodes = db_service.query_drs('node', {'profile.mac_address': mac_address})
         if not nodes:
             self._handle_discovery(mac_address)
             return
@@ -192,14 +192,19 @@ class MQTTHandler:
 
         try:
             node_data = {
-                'mac_address': mac_address,
-                'zone_id': None,
+                'profile': {
+                    'mac_address': mac_address,
+                    'zone_id': "",
+                },
+                'data': {
+                    'status': 'Provisioning',
+                    'last_seen': datetime.now(timezone.utc),
+                },
+                'metadata': {
                 'created_at': datetime.now(timezone.utc),
                 'updated_at': datetime.now(timezone.utc),
-            }
+            }}
             node_dr = dr_factory.create_dr('node', node_data)
-            node_dr['data']['status'] = "Provisioning"
-            node_dr['data']['last_seen'] = datetime.now(timezone.utc)
             db_service.save_dr('node', node_dr)
         except Exception as e:
             logger.error(f"Error handling provisioning: {e}")

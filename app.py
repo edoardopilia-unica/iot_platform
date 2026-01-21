@@ -55,7 +55,7 @@ class FlaskServer:
         self.app.config["SCHEMA_REGISTRY"] = schema_registry
         self.app.config["DB_SERVICE"] = db_service
         self.app.config["DT_FACTORY"] = dt_factory
-
+        
         factories = {
             "zone": DRFactory(zone_path),
             "node": DRFactory(node_path),
@@ -74,6 +74,7 @@ class FlaskServer:
         """Run the Flask server"""
         try:
             self.mqtt_handler.start()
+            self.app.config['MQTT'] = self.mqtt_handler
             self.app.run(host=host, port=port, debug=debug)
         finally:
             # Cleanup on server shutdown
