@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from datetime import datetime
+import datetime
 
 # Blueprint FCS APIs
 fcs_api = Blueprint('fcs_api', __name__, url_prefix='/api/fcs')
@@ -13,19 +13,23 @@ def create_zone():
         if 'name' not in data:
             return jsonify({'error': 'Zone name is required'}), 400
         
-        dr_factory = current_app.config['DR_FACTORY']
+        dr_factory = current_app.config['DR_FACTORY']['zone']
 
         zone_data = {
+            "profile": {
             'name': data['name'],
             'description': data.get('description', ''),
-            'created_at': datetime.now(datetime.timezone.utc),
-            'updated_at': datetime.now(datetime.timezone.utc),
             'temp_threshold': data.get('temp_threshold', 50.0),
             'smoke_threshold': data.get('smoke_threshold', 500.0)
-        }
-
+            },
+            "entity": {"data": {"status": "Active"}},
+            "metadata": {
+                "created_at": datetime.datetime.now(datetime.timezone.utc),
+                "updated_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        }        
         zone_dr = dr_factory.create_dr('zone', zone_data)
-        zone_id = current_app.config['DB_SERVICE'].insert_dr('zone', zone_dr)
+        zone_id = current_app.config['DB_SERVICE'].save_dr('zone', zone_dr)
         return jsonify({'zone_id': zone_id, 'message': 'Zone created successfully'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -109,15 +113,17 @@ def get_zones():
 
         result = []
         for zone in zones:
+            profile = zone.get('profile', {})
+            data = zone.get('entity', {}).get('data', {})
             result.append({
                 'id': zone['_id'],
-                'name': zone['name'],
-                'description': zone['description'],
-                'temp_threshold': zone['temp_threshold'],
-                'smoke_threshold': zone['smoke_threshold'],
-                'status': zone['entity']['data']['status']
+                'name': profile.get('name'),
+                'description': profile.get('description'),
+                'temp_threshold': profile.get('temp_threshold'),
+                'smoke_threshold': profile.get('smoke_threshold'),
+                'status': data.get('status')
             })
-        return jsonify(zones), 200
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     

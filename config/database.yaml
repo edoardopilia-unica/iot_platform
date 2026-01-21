@@ -5,5 +5,5 @@ database:
     username: "admin"  # Leave empty if no authentication is required
     password: "password"  # Leave empty if no authentication is required
   settings:
-    name: "digital_twin_db"  # Your database name
+    name: "safety_db"  # Your database name
     auth_source: "admin"

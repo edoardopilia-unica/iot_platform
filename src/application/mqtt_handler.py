@@ -19,7 +19,7 @@ class MQTTHandler:
         self._isrunning = False
 
     def start(self):
-        broker = self.app.config.get('MQTT_BROKER', 'mqtt')
+        broker = self.app.config.get('MQTT_BROKER', 'mosquitto')
         port = self.app.config.get('MQTT_PORT', 1883)
 
         try:

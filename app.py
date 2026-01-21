@@ -1,14 +1,18 @@
 from flask import Flask
 from flask_cors import CORS
 from src.virtualization.digital_replica.schema_registry import SchemaRegistry
+from src.virtualization.digital_replica.dr_factory import DRFactory
 from src.services.database_service import DatabaseService
 from src.digital_twin.dt_factory import DTFactory
 from src.application.api import register_api_blueprints
 from config.config_loader import ConfigLoader
-
+from src.digital_twin.core import DigitalTwin
 
 from src.application.mqtt_handler import MQTTHandler
 
+zone_path = 'src/virtualization/templates/zone.yaml'
+node_path = 'src/virtualization/templates/node.yaml'
+alarm_path = 'src/virtualization/templates/alarm.yaml'
 
 class FlaskServer:
     def __init__(self):
@@ -16,7 +20,9 @@ class FlaskServer:
         CORS(self.app)
         self._init_components()
         self._register_blueprints()
-        self.mqtt_handler = MQTTHandler(app=self.app)
+        self.mqtt_handler = MQTTHandler(self.app)
+
+        
 
     def _init_components(self):
         """Initialize all required components and store them in app config"""
@@ -24,9 +30,9 @@ class FlaskServer:
         # Initialize SchemaRegistry and load schemas
         schema_registry = SchemaRegistry()
         try:
-            schema_registry.load_schema('zone', 'src/virtualization/templates/zone.yaml')
-            schema_registry.load_schema('node', 'src/virtualization/templates/node.yaml')
-            schema_registry.load_schema('alarm', 'src/virtualization/templates/alarm.yaml')
+            schema_registry.load_schema('zone', zone_path)
+            schema_registry.load_schema('node', node_path)
+            schema_registry.load_schema('alarm', alarm_path)
         except Exception as e:
             print(f"Error loading schemas: {e}")
 
@@ -44,11 +50,21 @@ class FlaskServer:
 
         # Initialize DTFactory
         dt_factory = DTFactory(db_service, schema_registry)
-
+        
         # Store references
         self.app.config["SCHEMA_REGISTRY"] = schema_registry
         self.app.config["DB_SERVICE"] = db_service
         self.app.config["DT_FACTORY"] = dt_factory
+
+        factories = {
+            "zone": DRFactory(zone_path),
+            "node": DRFactory(node_path),
+            "alarm": DRFactory(alarm_path)
+        }
+
+        self.app.config["DR_FACTORY"] = factories
+  
+        
 
     def _register_blueprints(self):
         """Register all API blueprints"""
@@ -57,6 +73,7 @@ class FlaskServer:
     def run(self, host="0.0.0.0", port=5000, debug=True):
         """Run the Flask server"""
         try:
+            self.mqtt_handler.start()
             self.app.run(host=host, port=port, debug=debug)
         finally:
             # Cleanup on server shutdown
