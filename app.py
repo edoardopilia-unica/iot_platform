@@ -75,7 +75,7 @@ class FlaskServer:
         try:
             self.mqtt_handler.start()
             self.app.config['MQTT'] = self.mqtt_handler
-            self.app.run(host=host, port=port, debug=debug)
+            self.app.run(host=host, port=port, debug=debug, use_reloader=False)
         finally:
             # Cleanup on server shutdown
             if "DB_SERVICE" in self.app.config:

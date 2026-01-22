@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timezone
 
+import logging
+logger = logging.getLogger(__name__)
 
 # Blueprint FCS APIs
 fcs_api = Blueprint('fcs_api', __name__, url_prefix='/api/fcs')
@@ -77,9 +79,15 @@ def resolve_alarms(zone_id):
         if not zone:
             return jsonify({'error': 'Zone not found'}), 404
 
+        mqtt_handler = current_app.config.get('MQTT')
+        
         zone_status = zone['data']['status']
         if zone_status == 'Active':
-            return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200
+            if mqtt_handler:
+                nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
+                for node in nodes:
+                    mqtt_handler.send_command(node['profile']['mac_address'], "stop_alarm")
+            return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 201
 
         active_alarms = db_service.query_drs('alarm', {
             'profile.zone_id': zone_id,
@@ -92,7 +100,12 @@ def resolve_alarms(zone_id):
             zone['data']['status'] = 'Active'
             zone['metadata']['updated_at'] = now
             db_service.update_dr('zone', zone_id, zone)
-            return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 200
+            if mqtt_handler:
+                nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
+                for node in nodes:
+                    mqtt_handler.send_command(node['profile']['mac_address'], "stop_alarm")
+            
+            return jsonify({'message': f'No active alarms to resolve for zone {zone_id}'}), 201
         
         for alarm in active_alarms:
             alarm['data']['end_time'] = now
@@ -103,7 +116,7 @@ def resolve_alarms(zone_id):
         zone['metadata']['updated_at'] = now
         db_service.update_dr('zone', zone_id, zone)
 
-        mqtt_handler = current_app.config.get('MQTT')
+        
 
         if mqtt_handler:
             nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
@@ -249,9 +262,20 @@ def get_alarms():
             query = {'data.end_time': None}  # Filter for active alarms
         elif active_filter == 'false':
             query = {'data.end_time': not None}  # Filter for inactive alarms
-        
         alarms = db_service.query_drs('alarm', query)
-        return jsonify(alarms), 200
+        result = []
+        for alarm in alarms:
+            profile = alarm.get('profile', {})
+            data = alarm.get('data', {})
+            result.append({
+                'id': alarm['_id'],
+                'zone_id': profile.get('zone_id'),
+                'trigger_cause': profile.get('trigger_cause'),
+                'start_time': profile.get('start_time'),
+                'end_time': data.get('end_time')
+            })
+        
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

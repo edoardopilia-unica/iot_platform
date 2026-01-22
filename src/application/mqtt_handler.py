@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from flask import current_app
 
 logger = logging.getLogger(__name__)
+seen_list = []
 
 class MQTTHandler:
     def __init__(self, app):
@@ -84,7 +85,7 @@ class MQTTHandler:
                     return
                 
             except Exception as e:
-                logger.error(f"Error processing MQTT message: {e}")
+                logger.error(f"Error processing MQTT message: {e} - {parts}")
     
 
     def _process_sensor_data(self, mac_address, sensor_type, payload_str):
@@ -106,6 +107,7 @@ class MQTTHandler:
         
         nodes = db_service.query_drs('node', {'profile.mac_address': mac_address})
         if not nodes:
+            self._handle_discovery(mac_address)
             return
         
         node = nodes[0]
