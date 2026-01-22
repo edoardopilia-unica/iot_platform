@@ -60,7 +60,7 @@ def delete_zone(zone_id):
         nodes_in_zone = db_service.query_drs('node', {'profile.zone_id': zone_id})
         for node in nodes_in_zone:
             node['profile']['zone_id'] = None
-            node['entity']['data']['status'] = 'Inactive'
+            node['data']['status'] = 'Inactive'
             node['metadata']['updated_at'] = datetime.now(timezone.utc)
             db_service.update_dr("node", node['_id'], node)
         
