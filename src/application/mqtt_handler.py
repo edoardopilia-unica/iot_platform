@@ -114,11 +114,13 @@ class MQTTHandler:
         node_id = node['_id']
         zone_id = node['profile'].get('zone_id')
 
-        entity_data = node.get('data')
+        entity_data = node['data']
         entity_data['last_seen'] = datetime.now(timezone.utc)
-        entity_data['flame_detected'] = val_flame
-        entity_data['smoke_level'] = val_smoke
-        entity_data['temp_level'] = val_temp
+        if sensor_type == "flame":      entity_data['is_flame'] = val_flame
+        elif sensor_type == "smoke":    entity_data['smoke_level'] = val_smoke
+        elif sensor_type == "temp":     entity_data['temp_level'] = val_temp
+
+        node['data'] = entity_data
 
         node['metadata']['updated_at'] = datetime.now(timezone.utc)
         db_service.update_dr('node', node_id, node)
@@ -155,8 +157,11 @@ class MQTTHandler:
                     "profile.trigger_cause": "manual",
                     "data.end_time": None
                 })
-                if not(existing): self.send_command(zone['profile']['mac_address'], "stop_alarm")
-            
+                if not(existing):
+                    nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
+                    for node in nodes:
+                        self.send_command(node['profile']['mac_address'], "stop_alarm")
+                    
 
 
     def _trigger_alarm(self, zone_id, alarm_type):
