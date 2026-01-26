@@ -24,14 +24,14 @@ class MQTTHandler:
         port = self.app.config.get('MQTT_PORT', 1883)
 
         try:
-            logger.info(f"Connecting to MQTT Broker at {broker}:{port}")
+            logger.info(f"MQTT - Connecting to MQTT Broker at {broker}:{port}")
             self.client.connect(broker, port, 60)
 
             self.client.loop_start()
             self._isrunning = True
-            logger.info("MQTT Handler started and listening for messages.")
+            logger.info("MQTT - MQTT Handler started and listening for messages.")
         except Exception as e:
-            logger.error(f"Error connecting to MQTT Broker: {e}")
+            logger.error(f"MQTT - Error connecting to MQTT Broker: {e}")
 
 
     def stop(self):
@@ -39,18 +39,18 @@ class MQTTHandler:
             self.client.loop_stop()
             self.client.disconnect()
             self._isrunning = False
-            logger.info("MQTT Handler stopped.")
+            logger.info("MQTT - MQTT Handler stopped.")
 
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            logger.info("Connected to MQTT Broker successfully.")
+            logger.info("MQTT - Connected to MQTT Broker successfully.")
             # Subscribe to relevant topics
             self.client.subscribe("devices/+/+")
             self.client.subscribe("devices/+/sensor/+")
 
         else:
-            logger.error(f"Failed to connect to MQTT Broker. Return code: {rc}")
-        logger.info("Connected to MQTT Broker")
+            logger.error(f"MQTT - Failed to connect to MQTT Broker. Return code: {rc}")
+        logger.info("MQTT - Connected to MQTT Broker")
     
 
     def _on_message(self, client, userdata, msg):
@@ -61,12 +61,12 @@ class MQTTHandler:
                     payload_str = msg.payload.decode('utf-8')
                 except:
                     return
-                logger.info(f"Received message on topic: {msg.topic}")
+                logger.info(f"MQTT - Received message on topic: {msg.topic}")
                 
                 parts = topic.split('/')
 
                 if len(parts) < 3:
-                    logger.warning(f"Invalid topic format: {topic}")
+                    logger.warning(f"MQTT - Invalid topic format: {topic}")
                     return
                 
                 mac_address = parts[1]
@@ -85,7 +85,7 @@ class MQTTHandler:
                     return
                 
             except Exception as e:
-                logger.error(f"Error processing MQTT message: {e} - {parts}")
+                logger.error(f"MQTT - Error processing MQTT message: {e} - {parts}")
     
 
     def _process_sensor_data(self, mac_address, sensor_type, payload_str):
@@ -163,7 +163,7 @@ class MQTTHandler:
         db_service = current_app.config['DB_SERVICE']
         dr_factory = current_app.config['DR_FACTORY']['alarm']
 
-        logger.warning(f"Triggering alarm for zone {zone_id} due to {alarm_type}")
+        logger.info(f"MQTT - Triggering alarm for zone {zone_id} due to {alarm_type}")
 
         zone = db_service.get_dr('zone', zone_id)
         zone['data']['status'] = alarm_type
@@ -188,7 +188,7 @@ class MQTTHandler:
                 alarm_dr = dr_factory.create_dr('alarm', alarm_data)
                 alarm_id = db_service.save_dr('alarm', alarm_dr)
             except Exception as e:
-                logger.error(f"Error triggering alarm: {e}")
+                logger.error(f"MQTT - Error triggering alarm: {e}")
         
         nodes = db_service.query_drs('node', {'profile.zone_id': zone_id})
         for node in nodes:
@@ -201,7 +201,7 @@ class MQTTHandler:
         if db_service.query_drs('node', {'profile.mac_address': mac_address}):
             return
         
-        logger.info(f"New node: {mac_address}")
+        logger.info(f"MQTT - New node: {mac_address}")
 
         try:
             node_data = {
@@ -220,15 +220,15 @@ class MQTTHandler:
             node_dr = dr_factory.create_dr('node', node_data)
             db_service.save_dr('node', node_dr)
         except Exception as e:
-            logger.error(f"Error handling provisioning: {e}")
+            logger.error(f"MQTT - Error handling provisioning: {e}")
     
         
     def send_command(self, mac_address, command):
         if self.client.is_connected():
             topic = f"devices/{mac_address}/command"
             self.client.publish(topic, command)
-            logger.info(f"Sent {command} to {mac_address}")
+            logger.info(f"MQTT - Sent {command} to {mac_address}")
         else:
-            logger.warning("MQTT client not connected. Command not sent.")
+            logger.warning("MQTT - MQTT client not connected. Command not sent.")
 
     
