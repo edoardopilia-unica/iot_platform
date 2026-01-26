@@ -359,6 +359,7 @@ def acs_sync():
                 {'badge_id': str(p['badge_id'])},
                 {'$set': {
                     'full_name': p['full_name'],
+                    'in_time': p['in_time'],
                     'current_zone_id': current_zone_id,
                     'last_update': datetime.now(timezone.utc)
                 }},
