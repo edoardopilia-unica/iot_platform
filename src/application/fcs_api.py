@@ -381,7 +381,8 @@ def get_trapped(zone_id):
         for p in people:
             result.append({
                 'badge_id': p['badge_id'],
-                'full_name': p.get('full_name', 'Unknown')
+                'full_name': p.get('full_name', 'Unknown'),
+                'in_time': p['in_time']
             })
         return jsonify(result), 200
     except Exception as e:
